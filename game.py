@@ -4,6 +4,7 @@ import random
 import time
 import os
 import sys
+import json
 
 # Game constants
 TRACK_WIDTH = 40
@@ -15,6 +16,24 @@ EMPTY_CHAR = " "
 
 JUMP_HEIGHT = 3
 GRAVITY = 1
+MAX_LIVES = 3
+INVINCIBILITY_FRAMES = 60
+HIGH_SCORE_FILE = os.path.join(os.path.dirname(__file__), ".high_score.json")
+
+
+def load_high_score() -> int:
+    try:
+        with open(HIGH_SCORE_FILE) as f:
+            return json.load(f).get("high_score", 0)
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        return 0
+
+
+def save_high_score(score: int) -> None:
+    current = load_high_score()
+    if score > current:
+        with open(HIGH_SCORE_FILE, "w") as f:
+            json.dump({"high_score": score}, f)
 
 
 class Player:
@@ -22,23 +41,45 @@ class Player:
         self.x = 5
         self.y = 0  # 0 = ground level
         self.velocity_y = 0
-        self.is_jumping = False
+        self.jumps_remaining = 2  # supports double-jump
         self.score = 0
         self.alive = True
+        self.lives = MAX_LIVES
+        self.invincible_frames = 0
+
+    @property
+    def is_jumping(self):
+        return self.y > 0 or self.velocity_y > 0
+
+    @property
+    def invincible(self):
+        return self.invincible_frames > 0
 
     def jump(self):
-        if not self.is_jumping:
+        if self.jumps_remaining > 0:
             self.velocity_y = JUMP_HEIGHT
-            self.is_jumping = True
+            self.jumps_remaining -= 1
+
+    def hit(self):
+        if self.invincible:
+            return
+        self.lives -= 1
+        if self.lives <= 0:
+            self.alive = False
+        else:
+            self.invincible_frames = INVINCIBILITY_FRAMES
 
     def update(self):
-        if self.is_jumping:
+        if self.y > 0 or self.velocity_y > 0:
             self.y += self.velocity_y
             self.velocity_y -= GRAVITY
             if self.y <= 0:
                 self.y = 0
                 self.velocity_y = 0
-                self.is_jumping = False
+                self.jumps_remaining = 2  # reset on landing
+
+        if self.invincible_frames > 0:
+            self.invincible_frames -= 1
 
         self.score += 1
 
@@ -79,6 +120,7 @@ class Game:
         self.running = True
         self.spawn_interval = 30
         self.difficulty = 1
+        self.high_score = load_high_score()
 
     def spawn_obstacle(self):
         height = random.randint(1, 2)
@@ -93,12 +135,12 @@ class Game:
 
         for obs in self.obstacles:
             if obs.x == px and py < obs.height:
-                self.player.alive = False
+                self.player.hit()
                 return
 
         for mon in self.monsters:
             if mon.x == px and py == 0:
-                self.player.alive = False
+                self.player.hit()
                 return
 
     def update(self):
@@ -145,18 +187,28 @@ class Game:
             if 0 <= mon.x < TRACK_WIDTH:
                 rows[ground_index][mon.x] = MONSTER_CHAR
 
-        # Draw player
+        # Draw player (blink when invincible)
+        player_char = PLAYER_CHAR if not self.player.invincible or self.frame % 4 < 2 else " "
         player_row = ground_index - self.player.y
         if 0 <= player_row < len(rows):
-            rows[player_row][self.player.x] = PLAYER_CHAR
+            rows[player_row][self.player.x] = player_char
+
+        lives_display = "♥ " * self.player.lives + "♡ " * (MAX_LIVES - self.player.lives)
+        high_score_display = f"Best: {self.high_score}"
 
         os.system("clear" if os.name == "posix" else "cls")
-        print(f"  MonstersRun  |  Score: {self.player.score}  |  Level: {self.difficulty}")
+        print(f"  MonstersRun  |  Score: {self.player.score}  |  {high_score_display}  |  Level: {self.difficulty}")
+        print(f"  Lives: {lives_display.strip()}")
         print("+" + "-" * TRACK_WIDTH + "+")
         for row in rows:
             print("|" + "".join(row) + "|")
         print("+" + "-" * TRACK_WIDTH + "+")
-        print("  [SPACE] Jump   [Q] Quit")
+        print("  [SPACE] Jump / Double-jump   [Q] Quit")
+
+    def finish(self):
+        save_high_score(self.player.score)
+        new_best = self.player.score > self.high_score
+        print(f"\nGame Over! Final Score: {self.player.score}" + (" -- NEW HIGH SCORE!" if new_best else ""))
 
     def run_auto_demo(self):
         """Run a non-interactive demo (auto-jumps to avoid obstacles)."""
@@ -173,7 +225,7 @@ class Game:
             self.update()
             time.sleep(0.05)
 
-        print(f"Demo finished! Score: {self.player.score}")
+        self.finish()
 
     def run(self):
         if not sys.stdin.isatty():
@@ -191,7 +243,6 @@ class Game:
             tty.setraw(fd)
 
             while self.running and self.player.alive:
-                # Non-blocking input check
                 if select.select([sys.stdin], [], [], 0)[0]:
                     ch = sys.stdin.read(1)
                     if ch in (" ", "\n"):
@@ -200,14 +251,6 @@ class Game:
                         self.running = False
                         break
 
-                # Auto-jump hint for obstacles nearby
-                for obs in self.obstacles:
-                    if obs.x - self.player.x <= 3:
-                        self.player.jump()
-                for mon in self.monsters:
-                    if mon.x - self.player.x <= 3:
-                        self.player.jump()
-
                 self.update()
                 self.render()
                 time.sleep(0.08)
@@ -215,7 +258,7 @@ class Game:
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-        print(f"\nGame Over! Final Score: {self.player.score}")
+        self.finish()
 
 
 def main():
