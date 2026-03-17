@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MonstersRun</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      color: #eee;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 12px;
+      letter-spacing: 3px;
+      color: #e94560;
+      text-shadow: 0 0 12px #e9456088;
+    }
+    #gameCanvas {
+      border: 2px solid #e94560;
+      border-radius: 6px;
+      box-shadow: 0 0 24px #e9456044;
+      display: block;
+    }
+    #hud {
+      display: flex;
+      gap: 32px;
+      margin-top: 12px;
+      font-size: 1rem;
+      letter-spacing: 1px;
+    }
+    #hud span { color: #aaa; }
+    #hud strong { color: #fff; }
+    #overlay {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      pointer-events: none;
+    }
+    #overlay h2 { font-size: 2.2rem; color: #e94560; }
+    #overlay p  { font-size: 1rem; color: #ccc; }
+    #overlay button {
+      pointer-events: all;
+      padding: 10px 32px;
+      font-size: 1rem;
+      background: #e94560;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: background 0.2s;
+    }
+    #overlay button:hover { background: #c73650; }
+  </style>
+</head>
+<body>
+  <h1>MONSTERS RUN</h1>
+  <div style="position:relative">
+    <canvas id="gameCanvas" width="800" height="220"></canvas>
+    <div id="overlay">
+      <h2 id="overlayTitle">MONSTERS RUN</h2>
+      <p id="overlayMsg">Jump over obstacles and monsters!</p>
+      <p style="color:#888;font-size:.85rem">SPACE / ↑ / Tap to jump &nbsp;|&nbsp; Double-jump supported</p>
+      <button id="startBtn">START</button>
+    </div>
+  </div>
+  <div id="hud">
+    <div><span>SCORE </span><strong id="scoreVal">0</strong></div>
+    <div><span>BEST &nbsp;</span><strong id="bestVal">0</strong></div>
+    <div><span>LEVEL </span><strong id="levelVal">1</strong></div>
+    <div><span>LIVES </span><strong id="livesVal">♥♥♥</strong></div>
+  </div>
+
+  <script>
+  (() => {
+    // ── Constants ────────────────────────────────────────────────────
+    const W = 800, H = 220;
+    const GROUND_Y    = 170;   // top of ground line
+    const GRAVITY     = 0.55;
+    const JUMP_VY     = -13;
+    const MAX_LIVES   = 3;
+    const INVINCT_MS  = 1800;  // ms of invincibility after a hit
+    const COLORS = {
+      sky:      '#0f0f23',
+      ground:   '#2a2a4a',
+      groundLine:'#e94560',
+      player:   '#4fc3f7',
+      playerEye:'#0f0f23',
+      obstacle: '#e94560',
+      monster:  '#a855f7',
+      monsterEye:'#fff',
+      star:     '#ffffff44',
+    };
+
+    // ── Storage ──────────────────────────────────────────────────────
+    const LS_KEY = 'monstersrun_best';
+    let best = parseInt(localStorage.getItem(LS_KEY) || '0', 10);
+
+    // ── Canvas ───────────────────────────────────────────────────────
+    const canvas  = document.getElementById('gameCanvas');
+    const ctx     = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const startBtn= document.getElementById('startBtn');
+
+    // ── Stars (background) ──────────────────────────────────────────
+    const stars = Array.from({length: 60}, () => ({
+      x: Math.random() * W,
+      y: Math.random() * GROUND_Y * 0.9,
+      r: Math.random() * 1.5 + 0.3,
+    }));
+
+    // ── State ────────────────────────────────────────────────────────
+    let state = 'idle';   // idle | playing | dead
+    let player, obstacles, monsters, score, frame, speed, spawnTimer, hitTime;
+
+    function resetGame() {
+      player = {
+        x: 80, y: GROUND_Y,
+        vy: 0,
+        jumpsLeft: 2,
+        lives: MAX_LIVES,
+        invincUntil: 0,
+        squash: 1,   // visual squash/stretch
+        stretch: 1,
+      };
+      obstacles = [];
+      monsters  = [];
+      score     = 0;
+      frame     = 0;
+      speed     = 4;
+      spawnTimer= 0;
+      hitTime   = 0;
+    }
+
+    // ── Player helpers ───────────────────────────────────────────────
+    function jump() {
+      if (state !== 'playing') return;
+      if (player.jumpsLeft > 0) {
+        player.vy = JUMP_VY * (player.jumpsLeft === 1 ? 0.85 : 1);
+        player.jumpsLeft--;
+        player.stretch = 1.4;
+        player.squash  = 0.7;
+      }
+    }
+
+    function playerRect() {
+      const w = 28, h = 36;
+      return { x: player.x - w/2, y: player.y - h, w, h };
+    }
+
+    // ── Spawning ─────────────────────────────────────────────────────
+    function spawnInterval() {
+      // shrinks from 90 → 40 frames as speed grows
+      return Math.max(40, 120 - speed * 8);
+    }
+
+    function spawnObstacle() {
+      const h = 20 + Math.random() * 30;
+      obstacles.push({ x: W + 20, w: 18, h, y: GROUND_Y });
+    }
+
+    function spawnMonster() {
+      const bounceAmp = 18 + Math.random() * 14;
+      monsters.push({
+        x: W + 20, w: 28, h: 30,
+        baseY: GROUND_Y,
+        bounceAmp,
+        bouncePhase: Math.random() * Math.PI * 2,
+        speed: speed * (0.9 + Math.random() * 0.4),
+      });
+    }
+
+    // ── Collision ────────────────────────────────────────────────────
+    function rectsOverlap(a, b) {
+      const margin = 6; // forgiveness margin
+      return a.x + margin < b.x + b.w - margin &&
+             a.x + a.w - margin > b.x + margin &&
+             a.y + margin < b.y + b.h &&
+             a.y + a.h > b.y + margin;
+    }
+
+    // ── Update ───────────────────────────────────────────────────────
+    function update(ts) {
+      frame++;
+      score++;
+      speed = 4 + Math.floor(score / 300) * 0.5;
+
+      // Player physics
+      player.vy += GRAVITY;
+      player.y  += player.vy;
+
+      if (player.y >= GROUND_Y) {
+        player.y = GROUND_Y;
+        if (player.vy > 0) {
+          player.squash  = 0.65;
+          player.stretch = 1.35;
+        }
+        player.vy = 0;
+        player.jumpsLeft = 2;
+      }
+
+      // Ease squash/stretch back to 1
+      player.squash  += (1 - player.squash)  * 0.2;
+      player.stretch += (1 - player.stretch) * 0.2;
+
+      // Spawn
+      spawnTimer++;
+      if (spawnTimer >= spawnInterval()) {
+        spawnTimer = 0;
+        if (Math.random() < 0.55) spawnObstacle(); else spawnMonster();
+      }
+
+      // Move obstacles
+      obstacles = obstacles.filter(o => o.x + o.w > 0);
+      obstacles.forEach(o => o.x -= speed);
+
+      // Move monsters
+      monsters = monsters.filter(m => m.x + m.w > 0);
+      monsters.forEach(m => {
+        m.x -= m.speed;
+        m.bouncePhase += 0.18;
+      });
+
+      // Collisions
+      if (ts > player.invincUntil) {
+        const pr = playerRect();
+        for (const o of obstacles) {
+          const or = { x: o.x, y: o.y - o.h, w: o.w, h: o.h };
+          if (rectsOverlap(pr, or)) { takeDamage(ts); break; }
+        }
+        for (const m of monsters) {
+          const mr = { x: m.x, y: m.baseY - m.h, w: m.w, h: m.h };
+          if (rectsOverlap(pr, mr)) { takeDamage(ts); break; }
+        }
+      }
+    }
+
+    function takeDamage(ts) {
+      player.lives--;
+      player.invincUntil = ts + INVINCT_MS;
+      hitTime = ts;
+      if (player.lives <= 0) endGame();
+    }
+
+    function endGame() {
+      state = 'dead';
+      if (score > best) {
+        best = score;
+        localStorage.setItem(LS_KEY, best);
+      }
+      document.getElementById('overlayTitle').textContent = 'GAME OVER';
+      document.getElementById('overlayMsg').textContent =
+        `Score: ${score}${score >= best ? '  🏆 NEW BEST!' : `  |  Best: ${best}`}`;
+      startBtn.textContent = 'PLAY AGAIN';
+      overlay.style.display = 'flex';
+    }
+
+    // ── Draw helpers ─────────────────────────────────────────────────
+    function drawRoundRect(x, y, w, h, r, fill) {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.fill();
+    }
+
+    function drawPlayer(ts) {
+      const invinc  = ts < player.invincUntil;
+      if (invinc && Math.floor((player.invincUntil - ts) / 120) % 2 === 0) return;
+
+      const pw = 28 * player.squash;
+      const ph = 36 * player.stretch;
+      const px = player.x - pw / 2;
+      const py = player.y - ph;
+
+      // Body
+      drawRoundRect(px, py, pw, ph, 6, COLORS.player);
+
+      // Eye
+      const eyeX = px + pw * 0.65;
+      const eyeY = py + ph * 0.28;
+      ctx.fillStyle = COLORS.playerEye;
+      ctx.beginPath();
+      ctx.arc(eyeX, eyeY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(eyeX + 1, eyeY - 1, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Legs (running animation)
+      const legPhase = frame * 0.25;
+      ctx.strokeStyle = COLORS.player;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      if (player.y >= GROUND_Y) {
+        ctx.beginPath();
+        ctx.moveTo(px + pw * 0.3, py + ph);
+        ctx.lineTo(px + pw * 0.3 + Math.sin(legPhase) * 8, py + ph + 8);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px + pw * 0.7, py + ph);
+        ctx.lineTo(px + pw * 0.7 + Math.sin(legPhase + Math.PI) * 8, py + ph + 8);
+        ctx.stroke();
+      }
+    }
+
+    function drawObstacle(o) {
+      const x = o.x, y = o.y - o.h, w = o.w, h = o.h;
+      // Glow
+      ctx.shadowColor = COLORS.obstacle;
+      ctx.shadowBlur  = 8;
+      drawRoundRect(x, y, w, h, 3, COLORS.obstacle);
+      ctx.shadowBlur = 0;
+      // Crack lines
+      ctx.strokeStyle = '#ff8888';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + 4, y + h * (i / 3));
+        ctx.lineTo(x + w - 4, y + h * (i / 3) - 4);
+        ctx.stroke();
+      }
+    }
+
+    function drawMonster(m) {
+      const bounce = Math.sin(m.bouncePhase) * m.bounceAmp * 0.4;
+      const x = m.x, y = m.baseY - m.h + bounce, w = m.w, h = m.h;
+
+      ctx.shadowColor = COLORS.monster;
+      ctx.shadowBlur  = 10;
+      drawRoundRect(x, y, w, h, 8, COLORS.monster);
+      ctx.shadowBlur = 0;
+
+      // Eyes
+      const eyeY = y + h * 0.3;
+      [[x + w * 0.25, eyeY], [x + w * 0.7, eyeY]].forEach(([ex, ey]) => {
+        ctx.fillStyle = COLORS.monsterEye;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e94560';
+        ctx.beginPath();
+        ctx.arc(ex, ey, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Horns
+      ctx.fillStyle = '#c084fc';
+      [[x + w * 0.2, y], [x + w * 0.75, y]].forEach(([hx, hy]) => {
+        ctx.beginPath();
+        ctx.moveTo(hx - 4, hy);
+        ctx.lineTo(hx + 4, hy);
+        ctx.lineTo(hx, hy - 10);
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
+
+    function drawBackground(ts) {
+      // Sky
+      ctx.fillStyle = COLORS.sky;
+      ctx.fillRect(0, 0, W, H);
+
+      // Stars
+      ctx.fillStyle = COLORS.star;
+      stars.forEach(s => {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Parallax ground strips
+      ctx.fillStyle = '#16213e';
+      ctx.fillRect(0, GROUND_Y - 2, W, H - GROUND_Y + 2);
+
+      // Ground line glow
+      ctx.strokeStyle = COLORS.groundLine;
+      ctx.shadowColor = COLORS.groundLine;
+      ctx.shadowBlur  = 6;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, GROUND_Y);
+      ctx.lineTo(W, GROUND_Y);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Screen flash on hit
+      if (ts - hitTime < 200) {
+        ctx.fillStyle = `rgba(233,69,96,${0.3 * (1 - (ts - hitTime) / 200)})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    function updateHUD(ts) {
+      document.getElementById('scoreVal').textContent = score;
+      document.getElementById('bestVal').textContent  = best;
+      document.getElementById('levelVal').textContent = Math.floor(score / 300) + 1;
+      const hearts = '♥'.repeat(player.lives) + '♡'.repeat(MAX_LIVES - player.lives);
+      document.getElementById('livesVal').textContent = hearts;
+    }
+
+    // ── Game loop ────────────────────────────────────────────────────
+    function loop(ts) {
+      if (state === 'playing') update(ts);
+
+      drawBackground(ts);
+      obstacles.forEach(drawObstacle);
+      monsters.forEach(drawMonster);
+      if (state !== 'idle') drawPlayer(ts);
+      if (state === 'playing') updateHUD(ts);
+
+      requestAnimationFrame(loop);
+    }
+
+    // ── Input ────────────────────────────────────────────────────────
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        jump();
+      }
+    });
+    canvas.addEventListener('click', jump);
+    canvas.addEventListener('touchstart', e => { e.preventDefault(); jump(); }, { passive: false });
+
+    startBtn.addEventListener('click', () => {
+      resetGame();
+      state = 'playing';
+      overlay.style.display = 'none';
+      updateHUD(0);
+    });
+
+    // ── Boot ─────────────────────────────────────────────────────────
+    resetGame();
+    document.getElementById('bestVal').textContent = best;
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
