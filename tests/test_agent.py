@@ -1,0 +1,107 @@
+"""Tests for the agent loops using a stubbed client (no network).
+
+The stub mimics the shape Project June relies on from the Anthropic SDK:
+a `messages.create(**kwargs)` that returns an object with `.stop_reason` and
+`.content` (a list of blocks with `.type` and the relevant fields).
+"""
+
+from types import SimpleNamespace
+
+from project_june import Agent, AutonomousAgent, tool
+
+
+def text_block(text):
+    return SimpleNamespace(type="text", text=text)
+
+
+def tool_use_block(name, input, id="tu_1"):
+    return SimpleNamespace(type="tool_use", name=name, input=input, id=id)
+
+
+def response(content, stop_reason="end_turn"):
+    return SimpleNamespace(content=content, stop_reason=stop_reason, stop_details=None)
+
+
+class StubClient:
+    """Returns a scripted sequence of responses, one per create() call."""
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.calls = []
+        self.messages = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs):
+        # Snapshot messages at call time — the agent mutates the live list.
+        self.calls.append({**kwargs, "messages": list(kwargs["messages"])})
+        return self._responses.pop(0)
+
+
+@tool
+def echo(value: str) -> str:
+    """Echo a value back.
+
+    Args:
+        value: The value to echo.
+    """
+    return f"echoed:{value}"
+
+
+def test_agent_runs_tool_then_answers():
+    client = StubClient(
+        [
+            response([tool_use_block("echo", {"value": "hi"})], stop_reason="tool_use"),
+            response([text_block("All done.")], stop_reason="end_turn"),
+        ]
+    )
+    agent = Agent(tools=[echo], client=client)
+    assert agent.run("please echo hi") == "All done."
+    assert len(client.calls) == 2
+    # Second call's history must carry the tool_result back to the model.
+    last_user = client.calls[1]["messages"][-1]
+    assert last_user["role"] == "user"
+    assert last_user["content"][0]["content"] == "echoed:hi"
+
+
+def test_agent_handles_unknown_tool():
+    client = StubClient(
+        [
+            response([tool_use_block("nope", {})], stop_reason="tool_use"),
+            response([text_block("recovered")], stop_reason="end_turn"),
+        ]
+    )
+    agent = Agent(tools=[echo], client=client)
+    assert agent.run("call a missing tool") == "recovered"
+    tool_result = client.calls[1]["messages"][-1]["content"][0]
+    assert tool_result["is_error"] is True
+
+
+def test_agent_handles_refusal():
+    client = StubClient([response([], stop_reason="refusal")])
+    agent = Agent(client=client)
+    assert agent.run("bad").startswith("[refused]")
+
+
+def test_autonomous_completes_via_complete_task():
+    client = StubClient(
+        [
+            response([tool_use_block("echo", {"value": "x"})], stop_reason="tool_use"),
+            response(
+                [tool_use_block("complete_task", {"summary": "goal met"}, id="tu_2")],
+                stop_reason="tool_use",
+            ),
+        ]
+    )
+    agent = AutonomousAgent(tools=[echo], client=client)
+    result = agent.run("do the thing", max_steps=5)
+    assert result.completed is True
+    assert result.result == "goal met"
+    assert result.steps == 2
+
+
+def test_autonomous_nudges_then_stops_at_budget():
+    # Agent keeps ending its turn without finishing; budget should stop it.
+    client = StubClient([response([text_block("thinking...")]) for _ in range(3)])
+    agent = AutonomousAgent(tools=[echo], client=client)
+    result = agent.run("never-ending", max_steps=3)
+    assert result.completed is False
+    assert result.steps == 3

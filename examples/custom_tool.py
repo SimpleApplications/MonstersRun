@@ -4,8 +4,8 @@ Run with:  python examples/custom_tool.py
 Requires:  ANTHROPIC_API_KEY in the environment.
 """
 
-from claude_agents import Agent, AgentConfig, tool
-from claude_agents.builtin_tools import current_time
+from project_june import Agent, AgentConfig, tool
+from project_june.builtin_tools import current_time
 
 
 @tool

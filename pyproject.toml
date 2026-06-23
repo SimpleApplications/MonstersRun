@@ -1,7 +1,7 @@
 [project]
-name = "claude-agents"
+name = "project-june"
 version = "0.1.0"
-description = "A small, flexible framework for building AI agents on the Anthropic Claude API."
+description = "A framework for building independent (autonomous) Claude agents."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -11,19 +11,24 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "pytest>=8.0.0",
     "ruff>=0.6.0",
 ]
 
 [project.scripts]
-claude-agent = "claude_agents.cli:main"
+june = "project_june.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/claude_agents"]
+packages = ["src/project_june"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
