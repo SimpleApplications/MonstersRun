@@ -31,6 +31,9 @@ class AgentConfig:
         cache: When True, cache the tools + system prefix (prompt caching) so
             multi-turn loops pay the prefix cost once. Cheap and almost always
             worth it for agentic loops.
+        max_context_tokens: If set, compact the message history to stay under this
+            estimated token budget on long runs (drops the oldest exchanges,
+            keeps the task + recent turns). None disables compaction.
     """
 
     model: str = DEFAULT_MODEL
@@ -40,3 +43,4 @@ class AgentConfig:
     thinking: bool = True
     max_iterations: int = 25
     cache: bool = True
+    max_context_tokens: int | None = None

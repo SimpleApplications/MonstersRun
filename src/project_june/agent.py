@@ -19,6 +19,7 @@ from typing import Any, Callable, Iterable
 import anthropic
 
 from .config import AgentConfig
+from .context import compact_messages
 from .tools import Tool
 from .usage import Usage
 
@@ -48,6 +49,9 @@ class Agent:
         self.tools[t.name] = t
 
     def _request_kwargs(self) -> dict[str, Any]:
+        # Keep the history under budget on long runs (no-op when unset/small).
+        if self.config.max_context_tokens:
+            self.messages = compact_messages(self.messages, self.config.max_context_tokens)
         kwargs: dict[str, Any] = {
             "model": self.config.model,
             "max_tokens": self.config.max_tokens,
