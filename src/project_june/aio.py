@@ -60,6 +60,19 @@ class AsyncAgent:
                 return text  # type: ignore[return-value]
         return "[stopped] Reached max_iterations without a final answer."
 
+    async def stream(self, prompt: str, on_text: Callable[[str], None]) -> str:
+        """Like `run`, but stream text deltas to `on_text` as they arrive."""
+        self._core.messages.append({"role": "user", "content": prompt})
+        for _ in range(self._core.config.max_iterations):
+            async with self.client.messages.stream(**self._core._request_kwargs()) as stream:
+                async for chunk in stream.text_stream:
+                    on_text(chunk)
+                response = await stream.get_final_message()
+            done, text = self._core._advance(response)
+            if done:
+                return text  # type: ignore[return-value]
+        return "[stopped] Reached max_iterations without a final answer."
+
 
 class AsyncAutonomousAgent:
     """Async version of `AutonomousAgent`."""

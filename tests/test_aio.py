@@ -87,6 +87,53 @@ def test_async_agent_runs_tool_then_answers():
     assert out == "done"
 
 
+class _AsyncStreamCtx:
+    def __init__(self, chunks, final):
+        self._chunks = chunks
+        self._final = final
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    @property
+    def text_stream(self):
+        async def gen():
+            for c in self._chunks:
+                yield c
+        return gen()
+
+    async def get_final_message(self):
+        return self._final
+
+
+class AsyncStreamStub:
+    def __init__(self, turns):
+        self._turns = list(turns)
+        self.messages = SimpleNamespace(stream=self._stream)
+
+    def _stream(self, **kwargs):
+        chunks, final = self._turns.pop(0)
+        return _AsyncStreamCtx(chunks, final)
+
+
+def test_async_agent_stream_emits_text_and_runs_tools():
+    collected = []
+    client = AsyncStreamStub(
+        [
+            (["Let me ", "check."], response(
+                [tool_use_block("noop", {})], stop_reason="tool_use")),
+            (["All ", "done."], response([text_block("All done.")])),
+        ]
+    )
+    agent = AsyncAgent(client=client)
+    out = asyncio.run(agent.stream("go", on_text=collected.append))
+    assert out == "All done."
+    assert "".join(collected) == "Let me check.All done."
+
+
 def test_async_autonomous_completes():
     client = GoalEchoStub(delay=0)
     agent = AsyncAutonomousAgent(client=client)
