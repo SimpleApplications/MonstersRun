@@ -12,6 +12,7 @@ Public API:
 from .agent import Agent
 from .autonomous import AutonomousAgent, RunResult
 from .config import AgentConfig
+from .memory import MemoryStore, memory_tools
 from .tools import Tool, tool
 from .usage import Usage
 
@@ -20,6 +21,8 @@ __all__ = [
     "AutonomousAgent",
     "RunResult",
     "AgentConfig",
+    "MemoryStore",
+    "memory_tools",
     "Tool",
     "tool",
     "Usage",

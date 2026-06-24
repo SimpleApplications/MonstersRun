@@ -17,6 +17,10 @@ env/
 .env
 .env.local
 
+# Default agent memory + saved run transcripts
+.june_memory/
+.june_runs/
+
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
