@@ -13,6 +13,7 @@ from .agent import Agent
 from .autonomous import AutonomousAgent, RunResult
 from .config import AgentConfig
 from .memory import MemoryStore, memory_tools
+from .mcp_bridge import MCPProvider, MCPToolSpec, StaticMCPProvider, mcp_tools
 from .orchestrator import Orchestrator, OrchestratorResult, Task, synthesize
 from .tools import Tool, tool
 from .tracing import save_run
@@ -25,6 +26,10 @@ __all__ = [
     "AgentConfig",
     "MemoryStore",
     "memory_tools",
+    "MCPProvider",
+    "MCPToolSpec",
+    "StaticMCPProvider",
+    "mcp_tools",
     "Orchestrator",
     "OrchestratorResult",
     "Task",
