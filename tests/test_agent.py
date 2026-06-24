@@ -95,6 +95,23 @@ def test_agent_handles_refusal():
     assert agent.run("bad").startswith("[refused]")
 
 
+def test_run_json_parses_structured_output():
+    client = StubClient([response([text_block('{"name": "Ada", "age": 36}')])])
+    agent = Agent(client=client)
+    schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+        "required": ["name", "age"],
+        "additionalProperties": False,
+    }
+    out = agent.run_json("Extract the person.", schema)
+    assert out == {"name": "Ada", "age": 36}
+    # The request carried the json_schema format.
+    fmt = client.calls[0]["output_config"]["format"]
+    assert fmt["type"] == "json_schema"
+    assert fmt["schema"] == schema
+
+
 def test_autonomous_completes_via_complete_task():
     client = StubClient(
         [

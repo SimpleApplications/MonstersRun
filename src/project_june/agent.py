@@ -13,6 +13,7 @@ iteration ceiling, and inspect token usage.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Callable, Iterable
 
 import anthropic
@@ -99,6 +100,38 @@ class Agent:
             self.messages.append({"role": "user", "content": results})
 
         return "[stopped] Reached max_iterations without a final answer."
+
+    def run_json(self, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
+        """One-shot structured output: return a dict validated against `schema`.
+
+        Uses the Messages API's `output_config.format` so the model's response is
+        guaranteed to be JSON matching `schema`. This is a single call (no tool
+        loop) — use it for extraction/classification, not multi-step work.
+
+        Args:
+            prompt: The instruction (e.g. "Extract the name and age from ...").
+            schema: A JSON Schema object the response must conform to.
+        """
+        kwargs: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": self.config.max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+            "output_config": {
+                "effort": self.config.effort,
+                "format": {"type": "json_schema", "schema": schema},
+            },
+        }
+        if self.config.system:
+            kwargs["system"] = self.config.system
+        if self.config.thinking:
+            kwargs["thinking"] = {"type": "adaptive"}
+
+        response = self.client.messages.create(**kwargs)
+        self.usage.add(getattr(response, "usage", None))
+        if response.stop_reason == "refusal":
+            raise ValueError("request was declined (refusal)")
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        return json.loads(text)
 
     def _execute(self, block: Any) -> dict[str, Any]:
         """Run a single tool_use block, returning a tool_result block."""
