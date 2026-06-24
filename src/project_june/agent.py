@@ -64,9 +64,11 @@ class Agent:
         if self.config.thinking:
             # Adaptive thinking: Claude decides how much to think per turn.
             kwargs["thinking"] = {"type": "adaptive"}
-        if self.tools:
-            kwargs["tools"] = [t.to_api() for t in self.tools.values()]
-        if self.config.cache and (self.config.system or self.tools):
+        # Local tools (executed in our loop) + server tools (run by Anthropic).
+        tool_specs = [t.to_api() for t in self.tools.values()] + list(self.config.server_tools)
+        if tool_specs:
+            kwargs["tools"] = tool_specs
+        if self.config.cache and (self.config.system or tool_specs):
             # Auto-cache the last cacheable block (the tools + system prefix), so
             # a multi-turn loop reprocesses that prefix at ~0.1x after turn one.
             kwargs["cache_control"] = {"type": "ephemeral"}

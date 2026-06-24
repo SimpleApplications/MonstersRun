@@ -7,7 +7,8 @@ Everything else uses sensible Claude defaults.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 # Default to the most capable Opus-tier model. Override with CLAUDE_AGENT_MODEL
 # or by passing model=... to AgentConfig.
@@ -37,6 +38,9 @@ class AgentConfig:
         max_retries: How many times the SDK retries transient errors (429/500/
             overloaded) with exponential backoff before giving up.
         request_timeout: Per-request timeout in seconds (None = SDK default).
+        server_tools: Raw Anthropic server-tool specs to include in every request
+            (e.g. {"type": "web_search_20260209", "name": "web_search"}). These
+            run server-side; the agent loop never executes them locally.
     """
 
     model: str = DEFAULT_MODEL
@@ -49,6 +53,7 @@ class AgentConfig:
     max_context_tokens: int | None = None
     max_retries: int = 4
     request_timeout: float | None = None
+    server_tools: list[dict[str, Any]] = field(default_factory=list)
 
     def client_kwargs(self) -> dict:
         """Constructor kwargs for the Anthropic client (retries/timeout)."""

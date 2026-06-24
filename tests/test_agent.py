@@ -126,6 +126,26 @@ def test_agent_handles_refusal():
     assert agent.run("bad").startswith("[refused]")
 
 
+def test_server_tools_are_sent_and_not_executed_locally():
+    from project_june import AgentConfig
+
+    # The model "uses" a server tool (server_tool_use) and the API returns the
+    # result server-side; our loop must not try to execute it, and should finish.
+    server_use = SimpleNamespace(type="server_tool_use", name="web_search", input={}, id="s1")
+    server_result = SimpleNamespace(type="web_search_tool_result", content=[])
+    client = StubClient(
+        [
+            response([server_use, server_result, text_block("Here are the results.")]),
+        ]
+    )
+    cfg = AgentConfig(server_tools=[{"type": "web_search_20260209", "name": "web_search"}])
+    agent = Agent(config=cfg, client=client)
+    out = agent.run("search the web")
+    assert out == "Here are the results."
+    # The server tool spec was included in the request.
+    assert client.calls[0]["tools"] == [{"type": "web_search_20260209", "name": "web_search"}]
+
+
 def test_run_json_parses_structured_output():
     client = StubClient([response([text_block('{"name": "Ada", "age": 36}')])])
     agent = Agent(client=client)

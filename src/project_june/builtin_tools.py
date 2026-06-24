@@ -108,3 +108,8 @@ DEFAULT_TOOLS = [current_time, calculate, read_file, list_directory]
 
 # Tools with side effects — opt in explicitly.
 WRITE_TOOLS = [write_file]
+
+# Anthropic server-tool specs (run server-side; pass via AgentConfig.server_tools).
+# Use the latest variants on Opus 4.6+/Sonnet 4.6; older models need the basic ones.
+WEB_SEARCH = {"type": "web_search_20260209", "name": "web_search"}
+WEB_FETCH = {"type": "web_fetch_20260209", "name": "web_fetch"}
