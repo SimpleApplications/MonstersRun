@@ -10,6 +10,7 @@ Public API:
 """
 
 from .agent import Agent
+from .aio import AsyncAgent, AsyncAutonomousAgent, AsyncOrchestrator
 from .autonomous import AutonomousAgent, RunResult
 from .config import AgentConfig
 from .memory import MemoryStore, memory_tools
@@ -21,6 +22,9 @@ from .usage import Usage
 
 __all__ = [
     "Agent",
+    "AsyncAgent",
+    "AsyncAutonomousAgent",
+    "AsyncOrchestrator",
     "AutonomousAgent",
     "RunResult",
     "AgentConfig",
