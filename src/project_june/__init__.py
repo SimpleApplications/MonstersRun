@@ -13,6 +13,7 @@ from .agent import Agent
 from .aio import AsyncAgent, AsyncAutonomousAgent, AsyncOrchestrator
 from .autonomous import AutonomousAgent, RunResult
 from .config import AgentConfig
+from .delegation import agent_tool
 from .evals import (
     EvalCase,
     EvalReport,
@@ -55,6 +56,7 @@ __all__ = [
     "contains",
     "completed",
     "all_of",
+    "agent_tool",
     "Tool",
     "tool",
     "Usage",
