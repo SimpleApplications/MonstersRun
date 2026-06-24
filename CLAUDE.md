@@ -80,4 +80,8 @@ the no-network stub-test pattern, export it from `__init__.py`, and run
   use `budget_tokens` (removed on 4.7/4.8 — returns 400).
 - Effort lives under `output_config={"effort": "..."}` (`low`/`medium`/`high`/`max`).
 - Always check `stop_reason == "refusal"` before reading `response.content`.
+- Prompt caching: top-level `cache_control={"type": "ephemeral"}` on
+  `messages.create()` is the documented "automatic caching" shape (caches the
+  last cacheable block). Min cacheable prefix on Opus 4.8 is ~4096 tokens — small
+  prompts silently won't cache, which is fine.
 - Stream when `max_tokens` is large; the current defaults stay under that bound.
