@@ -50,6 +50,37 @@ class StubClient:
         return self._responses.pop(0)
 
 
+class _StreamCtx:
+    """Mimics the SDK's streaming context manager for one turn."""
+
+    def __init__(self, chunks, final):
+        self._chunks = chunks
+        self._final = final
+        self.text_stream = iter(chunks)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_final_message(self):
+        return self._final
+
+
+class StreamStubClient:
+    """Stub whose messages.stream() yields scripted text chunks per turn."""
+
+    def __init__(self, turns):
+        # turns: list of (chunks, final_response)
+        self._turns = list(turns)
+        self.messages = SimpleNamespace(stream=self._stream)
+
+    def _stream(self, **kwargs):
+        chunks, final = self._turns.pop(0)
+        return _StreamCtx(chunks, final)
+
+
 @tool
 def echo(value: str) -> str:
     """Echo a value back.
@@ -147,6 +178,23 @@ def test_autonomous_tracks_usage_and_cost():
     assert result.usage.output_tokens == 500
     assert result.model == "claude-opus-4-8"
     assert result.cost > 0
+
+
+def test_stream_emits_text_and_runs_tools():
+    collected = []
+    client = StreamStubClient(
+        [
+            # Turn 1: streams some text, then asks for a tool.
+            (["Let me ", "check."], response(
+                [tool_use_block("echo", {"value": "hi"})], stop_reason="tool_use")),
+            # Turn 2: streams the final answer.
+            (["All ", "done."], response([text_block("All done.")])),
+        ]
+    )
+    agent = Agent(tools=[echo], client=client)
+    final = agent.stream("go", on_text=collected.append)
+    assert final == "All done."
+    assert "".join(collected) == "Let me check.All done."
 
 
 def test_run_json_errors_on_truncation():

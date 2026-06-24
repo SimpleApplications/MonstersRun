@@ -95,7 +95,9 @@ def _chat(args: argparse.Namespace) -> None:
             break
         if not prompt.strip():
             continue
-        print(f"\n\033[1magent ›\033[0m {agent.run(prompt)}")
+        print("\n\033[1magent ›\033[0m ", end="", flush=True)
+        agent.stream(prompt, on_text=lambda t: print(t, end="", flush=True))
+        print()
 
 
 def _parser() -> argparse.ArgumentParser:

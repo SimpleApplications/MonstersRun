@@ -70,36 +70,57 @@ class Agent:
     def run(self, prompt: str) -> str:
         """Run one user turn to completion and return Claude's final text."""
         self.messages.append({"role": "user", "content": prompt})
-
         for _ in range(self.config.max_iterations):
             response = self.client.messages.create(**self._request_kwargs())
-            self.usage.add(getattr(response, "usage", None))
-
-            if response.stop_reason == "refusal":
-                detail = getattr(response, "stop_details", None)
-                category = getattr(detail, "category", None)
-                return f"[refused] The request was declined (category: {category})."
-
-            # Preserve the full assistant turn (text + thinking + tool_use blocks).
-            self.messages.append({"role": "assistant", "content": response.content})
-
-            # A server-side tool hit its iteration cap. Re-send to let the server
-            # resume; do not add a user message.
-            if response.stop_reason == "pause_turn":
-                continue
-
-            tool_uses = [b for b in response.content if b.type == "tool_use"]
-            if not tool_uses:
-                # No tools requested — we're done. Return the text blocks.
-                return "".join(b.text for b in response.content if b.type == "text").strip()
-
-            # Execute every requested tool and return all results in one user turn.
-            results: list[dict[str, Any]] = []
-            for block in tool_uses:
-                results.append(self._execute(block))
-            self.messages.append({"role": "user", "content": results})
-
+            done, text = self._advance(response)
+            if done:
+                return text  # type: ignore[return-value]
         return "[stopped] Reached max_iterations without a final answer."
+
+    def stream(self, prompt: str, on_text: Callable[[str], None]) -> str:
+        """Like `run`, but stream text deltas to `on_text` as they arrive.
+
+        Streaming avoids HTTP timeouts on long outputs and lets a UI render
+        tokens live. The tool-use loop is identical to `run`.
+        """
+        self.messages.append({"role": "user", "content": prompt})
+        for _ in range(self.config.max_iterations):
+            with self.client.messages.stream(**self._request_kwargs()) as stream:
+                for chunk in stream.text_stream:
+                    on_text(chunk)
+                response = stream.get_final_message()
+            done, text = self._advance(response)
+            if done:
+                return text  # type: ignore[return-value]
+        return "[stopped] Reached max_iterations without a final answer."
+
+    def _advance(self, response: Any) -> tuple[bool, str | None]:
+        """Process one response: record usage, run tools, advance the loop.
+
+        Returns (done, final_text). When `done` is True the loop should stop and
+        return `final_text`; otherwise it should make another model call.
+        """
+        self.usage.add(getattr(response, "usage", None))
+
+        if response.stop_reason == "refusal":
+            detail = getattr(response, "stop_details", None)
+            category = getattr(detail, "category", None)
+            return True, f"[refused] The request was declined (category: {category})."
+
+        # Preserve the full assistant turn (text + thinking + tool_use blocks).
+        self.messages.append({"role": "assistant", "content": response.content})
+
+        # A server-side tool hit its iteration cap — re-send to let it resume.
+        if response.stop_reason == "pause_turn":
+            return False, None
+
+        tool_uses = [b for b in response.content if b.type == "tool_use"]
+        if not tool_uses:
+            return True, "".join(b.text for b in response.content if b.type == "text").strip()
+
+        results = [self._execute(block) for block in tool_uses]
+        self.messages.append({"role": "user", "content": results})
+        return False, None
 
     def run_json(self, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
         """One-shot structured output: return a dict validated against `schema`.
