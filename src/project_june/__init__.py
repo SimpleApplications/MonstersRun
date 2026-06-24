@@ -15,6 +15,7 @@ from .config import AgentConfig
 from .memory import MemoryStore, memory_tools
 from .orchestrator import Orchestrator, OrchestratorResult, Task, synthesize
 from .tools import Tool, tool
+from .tracing import save_run
 from .usage import Usage
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "OrchestratorResult",
     "Task",
     "synthesize",
+    "save_run",
     "Tool",
     "tool",
     "Usage",
