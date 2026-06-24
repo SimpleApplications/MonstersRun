@@ -30,13 +30,22 @@ Features
   usage and estimated cost.
 - **`Orchestrator`** — run many independent agents **concurrently** toward
   sub-goals; aggregate results, usage, and cost. `synthesize()` for fan-out →
-  combine.
+  combine. Async variants (`AsyncOrchestrator`) for asyncio fan-out.
+- **Delegation** — `agent_tool()` wraps an agent as a tool, so a coordinator can
+  spin up focused sub-agents (hierarchical, independent agents).
+- **MCP bridge** — `mcp_tools()` exposes any MCP server's tools to an agent.
 - **Persistent memory** — a path-safe `MemoryStore` + `memory_tools` so agents
   carry learnings across runs.
+- **Evaluation harness** — `run_eval()` scores an agent against a task suite
+  (concurrently) with pass rate, per-case detail, and cost.
+- **Built for long runs** — prompt caching, automatic context compaction
+  (`max_context_tokens`), and SDK retry/backoff (`max_retries`).
 - **Observability** — `Usage`/cost accounting and `save_run` to persist a run's
   transcript for auditing.
-- **CLI** — chat, one-off prompts, single goals, or concurrent multi-goal runs.
-- **Tests with no network** — every loop is covered by a stub client (39 tests).
+- **CLI** — chat (streaming), one-off prompts, single goals, or concurrent
+  multi-goal runs.
+- **Tests with no network** — every loop is covered by a stub client (74 tests;
+  live API tests are opt-in via `ANTHROPIC_API_KEY`).
 
 Install
 -------
@@ -128,26 +137,49 @@ june --goal "research X" --memory --save    # with persistent memory; save trans
 june --goals "summarize A" "summarize B"    # several independent agents, concurrently
 ```
 
-Built-in example tools: `current_time`, `calculate`, `read_file`
-(`src/project_june/builtin_tools.py`).
+Built-in example tools: `current_time`, `calculate`, `read_file`,
+`list_directory`, and (opt-in) `write_file` (`src/project_june/builtin_tools.py`).
+
+Delegation, evals, and MCP
+--------------------------
+
+```python
+from project_june import Agent, agent_tool, EvalCase, run_eval, contains, mcp_tools
+
+# Delegate subtasks to a focused sub-agent:
+researcher = agent_tool("research", "Delegate a research question.")
+coordinator = Agent(tools=[researcher])
+
+# Score an agent against a suite:
+report = run_eval([EvalCase("math", "Compute 6*7.", check=contains("42"))])
+print(report.summary())
+
+# Give an agent an MCP server's tools (provider implements list_tools/call_tool):
+# agent = Agent(tools=mcp_tools(my_mcp_provider, prefix="gh_"))
+```
 
 Project layout
 --------------
 
 ```
 src/project_june/
-  agent.py          # the core agentic loop (+ run_json structured output)
+  agent.py          # core agentic loop (+ run_json structured output, + stream)
   autonomous.py     # AutonomousAgent + RunResult (independent goal pursuit)
   orchestrator.py   # Orchestrator + synthesize (concurrent multi-agent)
+  aio.py            # AsyncAgent / AsyncAutonomousAgent / AsyncOrchestrator
+  delegation.py     # agent_tool (wrap an agent as a tool / sub-agents)
+  evals.py          # run_eval + EvalCase + checks (score agents on suites)
+  mcp_bridge.py     # mcp_tools (bridge MCP servers into agent tools)
   memory.py         # MemoryStore + memory_tools (persistent, path-safe)
+  context.py        # compact_messages (context-window management)
   usage.py          # token/cost accounting
   tracing.py        # save_run (persist run transcripts)
-  config.py         # AgentConfig (model, system, effort, thinking, cache, limits)
+  config.py         # AgentConfig (model, effort, cache, context, retries, ...)
   tools.py          # Tool + the @tool decorator (schema from type hints)
   builtin_tools.py  # example tools
   cli.py            # `june` entry point
 docs/architecture.md  # how the layers fit together
-tests/              # stub-client tests (no network)
+tests/              # stub-client tests (no network); live tests opt-in
 examples/           # runnable examples (require a real API key)
 ```
 
@@ -155,7 +187,7 @@ Development
 -----------
 
 ```bash
-pytest -q                   # 39 tests, no network needed
+pytest -q                   # 74 tests, no network needed
 ruff check src tests        # lint
 ```
 

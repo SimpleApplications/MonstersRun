@@ -4,18 +4,21 @@ Project June is a layered framework for building independent Claude agents. Each
 layer builds on the one below and is independently usable.
 
 ```
-Orchestrator      run many independent agents concurrently, aggregate results
+Orchestrator / AsyncOrchestrator   run many independent agents concurrently
     │
 AutonomousAgent   pursue a goal across turns; self-terminate via complete_task
+    │               (agent_tool wraps one as a Tool → sub-agents / delegation)
+Agent             one user turn → completion (the tool-use loop; + stream, run_json)
     │
-Agent             one user turn → completion (the tool-use loop)
+tools / memory / mcp   @tool decorator, MemoryStore, mcp_tools, builtin tools
     │
-tools / memory    @tool decorator, MemoryStore, builtin tools
-    │
-usage / tracing   token+cost accounting, persisted run transcripts
+usage / tracing / context   token+cost accounting, transcripts, compaction
     │
 anthropic SDK     Messages API (claude-opus-4-8, adaptive thinking, caching)
 ```
+
+Cross-cutting: `evals.py` (score agents on suites) sits beside the orchestrator;
+`aio.py` mirrors the sync stack on `AsyncAnthropic`.
 
 ## Layers
 

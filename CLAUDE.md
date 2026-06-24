@@ -22,20 +22,27 @@ API calls, and those need `ANTHROPIC_API_KEY`.
 
 ```
 src/project_june/
-  agent.py          Agent — one user turn to completion (the tool-use loop) +
-                    run_json (one-shot structured output)
+  agent.py          Agent — one user turn to completion (tool-use loop) +
+                    run_json (structured output) + stream (live tokens)
   autonomous.py     AutonomousAgent — pursues a goal across turns, self-terminates
                     via a built-in complete_task tool; returns a RunResult
-  orchestrator.py   Orchestrator — runs many independent agents concurrently;
-                    synthesize() for fan-out -> combine
+  orchestrator.py   Orchestrator — runs many independent agents concurrently
+                    (threads); synthesize() for fan-out -> combine
+  aio.py            AsyncAgent / AsyncAutonomousAgent / AsyncOrchestrator (asyncio)
+  delegation.py     agent_tool — wrap an AutonomousAgent as a Tool (sub-agents)
+  evals.py          run_eval + EvalCase + checks — score agents on task suites
+  mcp_bridge.py     mcp_tools — expose any MCP server's tools to an agent
   memory.py         MemoryStore + memory_tools — persistent, path-safe notes
+  context.py        compact_messages — keep long histories under a token budget
   usage.py          Usage — token/cost accounting (per-model price table)
   tracing.py        save_run — persist a run (transcript + usage + cost) to JSON
-  config.py         AgentConfig (model, system, effort, thinking, cache, limits)
+  config.py         AgentConfig (model, system, effort, thinking, cache,
+                    max_context_tokens, max_retries, limits)
   tools.py          Tool + @tool decorator (JSON schema from type hints + docstring)
-  builtin_tools.py  Example tools: current_time, calculate, read_file
+  builtin_tools.py  Example tools: current_time, calculate, read_file,
+                    list_directory (DEFAULT_TOOLS); write_file (WRITE_TOOLS)
   cli.py            `june` entry point (chat / one-off / --goal / --goals)
-tests/              Stub-client tests — no network (39 tests)
+tests/              Stub-client tests — no network (74 tests; live tests opt-in)
 examples/           Runnable examples (require a real API key)
 docs/architecture.md  Layer-by-layer design overview
 ```
@@ -43,8 +50,14 @@ docs/architecture.md  Layer-by-layer design overview
 The agent loop is **manual on purpose** (not the SDK tool runner): it gives one
 readable place to log steps, gate tool execution, cap iterations, and inspect
 usage. `AutonomousAgent` builds on `Agent` for cross-turn goal pursuit;
-`Orchestrator` runs many of those concurrently. Layering: Orchestrator →
-AutonomousAgent → Agent → tools/memory → usage/tracing → SDK.
+`Orchestrator` (threads) and `AsyncOrchestrator` (asyncio) run many of those
+concurrently; `agent_tool` lets one agent delegate to others. Layering:
+Orchestrator → AutonomousAgent → Agent → tools/memory/mcp → usage/tracing/context
+→ SDK.
+
+When adding a module: mirror it across sync/async if it touches the loop, keep
+the no-network stub-test pattern, export it from `__init__.py`, and run
+`ruff check src tests` + `pytest -q` before committing.
 
 ## Conventions
 
