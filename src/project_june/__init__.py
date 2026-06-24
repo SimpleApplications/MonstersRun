@@ -13,6 +13,7 @@ from .agent import Agent
 from .autonomous import AutonomousAgent, RunResult
 from .config import AgentConfig
 from .memory import MemoryStore, memory_tools
+from .orchestrator import Orchestrator, OrchestratorResult, Task, synthesize
 from .tools import Tool, tool
 from .usage import Usage
 
@@ -23,6 +24,10 @@ __all__ = [
     "AgentConfig",
     "MemoryStore",
     "memory_tools",
+    "Orchestrator",
+    "OrchestratorResult",
+    "Task",
+    "synthesize",
     "Tool",
     "tool",
     "Usage",
