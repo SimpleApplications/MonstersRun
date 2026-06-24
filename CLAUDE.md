@@ -22,20 +22,29 @@ API calls, and those need `ANTHROPIC_API_KEY`.
 
 ```
 src/project_june/
-  agent.py          Agent — one user turn run to completion (the tool-use loop)
+  agent.py          Agent — one user turn to completion (the tool-use loop) +
+                    run_json (one-shot structured output)
   autonomous.py     AutonomousAgent — pursues a goal across turns, self-terminates
                     via a built-in complete_task tool; returns a RunResult
+  orchestrator.py   Orchestrator — runs many independent agents concurrently;
+                    synthesize() for fan-out -> combine
+  memory.py         MemoryStore + memory_tools — persistent, path-safe notes
+  usage.py          Usage — token/cost accounting (per-model price table)
+  tracing.py        save_run — persist a run (transcript + usage + cost) to JSON
+  config.py         AgentConfig (model, system, effort, thinking, cache, limits)
   tools.py          Tool + @tool decorator (JSON schema from type hints + docstring)
   builtin_tools.py  Example tools: current_time, calculate, read_file
-  config.py         AgentConfig (model, system, effort, thinking, max_iterations)
-  cli.py            `june` entry point (chat / one-off / --goal modes)
-tests/              Stub-client tests for tools and both agent loops
+  cli.py            `june` entry point (chat / one-off / --goal / --goals)
+tests/              Stub-client tests — no network (39 tests)
 examples/           Runnable examples (require a real API key)
+docs/architecture.md  Layer-by-layer design overview
 ```
 
 The agent loop is **manual on purpose** (not the SDK tool runner): it gives one
 readable place to log steps, gate tool execution, cap iterations, and inspect
-usage. `AutonomousAgent` builds on `Agent` to add cross-turn goal pursuit.
+usage. `AutonomousAgent` builds on `Agent` for cross-turn goal pursuit;
+`Orchestrator` runs many of those concurrently. Layering: Orchestrator →
+AutonomousAgent → Agent → tools/memory → usage/tracing → SDK.
 
 ## Conventions
 
