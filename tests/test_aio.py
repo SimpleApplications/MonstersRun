@@ -96,6 +96,15 @@ def test_async_autonomous_completes():
     assert result.usage.input_tokens == 100
 
 
+def test_async_autonomous_fires_on_step():
+    # Parity with the sync AutonomousAgent's on_step hook.
+    seen = []
+    client = GoalEchoStub(delay=0)
+    agent = AsyncAutonomousAgent(client=client, on_step=lambda step, resp: seen.append(step))
+    asyncio.run(agent.run("do it"))
+    assert seen == [1]
+
+
 def test_async_orchestrator_runs_concurrently():
     client = GoalEchoStub(delay=0.05)
     orch = AsyncOrchestrator(client=client, max_concurrency=8)

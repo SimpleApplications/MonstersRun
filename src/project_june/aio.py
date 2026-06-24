@@ -15,7 +15,7 @@ from typing import Any, Callable, Iterable
 import anthropic
 
 from .agent import Agent, EventHook
-from .autonomous import RunResult, _GOAL_PROMPT, _NUDGE, _last_text
+from .autonomous import RunResult, StepHook, _GOAL_PROMPT, _NUDGE, _last_text
 from .config import AgentConfig
 from .orchestrator import OrchestratorResult, Task
 from .tools import Tool, tool
@@ -70,6 +70,7 @@ class AsyncAutonomousAgent:
         config: AgentConfig | None = None,
         client: anthropic.AsyncAnthropic | None = None,
         on_tool: EventHook | None = None,
+        on_step: StepHook | None = None,
     ) -> None:
         self._final: str | None = None
 
@@ -85,6 +86,7 @@ class AsyncAutonomousAgent:
 
         all_tools: list[Tool] = list(tools or []) + [complete_task]
         self.agent = AsyncAgent(tools=all_tools, config=config, client=client, on_tool=on_tool)
+        self.on_step = on_step
 
     async def run(self, goal: str, max_steps: int = 12) -> RunResult:
         self._final = None
@@ -105,6 +107,8 @@ class AsyncAutonomousAgent:
                 return self._result(False, f"[refused] Request declined (category: {category}).", steps)
 
             core.messages.append({"role": "assistant", "content": response.content})
+            if self.on_step:
+                self.on_step(steps, response)
             if response.stop_reason == "pause_turn":
                 continue
 
