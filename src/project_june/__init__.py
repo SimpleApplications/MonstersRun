@@ -13,6 +13,15 @@ from .agent import Agent
 from .aio import AsyncAgent, AsyncAutonomousAgent, AsyncOrchestrator
 from .autonomous import AutonomousAgent, RunResult
 from .config import AgentConfig
+from .evals import (
+    EvalCase,
+    EvalReport,
+    EvalResult,
+    all_of,
+    completed,
+    contains,
+    run_eval,
+)
 from .memory import MemoryStore, memory_tools
 from .mcp_bridge import MCPProvider, MCPToolSpec, StaticMCPProvider, mcp_tools
 from .orchestrator import Orchestrator, OrchestratorResult, Task, synthesize
@@ -39,6 +48,13 @@ __all__ = [
     "Task",
     "synthesize",
     "save_run",
+    "EvalCase",
+    "EvalReport",
+    "EvalResult",
+    "run_eval",
+    "contains",
+    "completed",
+    "all_of",
     "Tool",
     "tool",
     "Usage",
