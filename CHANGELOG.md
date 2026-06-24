@@ -17,9 +17,11 @@ All notable changes to Project June are documented here.
 - **Async** (`AsyncAgent`, `AsyncAutonomousAgent`, `AsyncOrchestrator`): asyncio
   variants for high-concurrency fan-out.
 - **Delegation** (`agent_tool`): wrap an agent as a tool so a coordinator can
-  spawn focused sub-agents.
+  spawn focused sub-agents (hierarchical, independent agents).
 - **MCP bridge** (`mcp_tools`, `StaticMCPProvider`): expose any MCP server's
   tools to an agent.
+- **Server tools** (`AgentConfig.server_tools`, `WEB_SEARCH`/`WEB_FETCH`): let an
+  agent use Anthropic's server-side tools (web search/fetch, etc.).
 - **Evaluation harness** (`run_eval`, `EvalCase`, `contains`/`completed`/`all_of`):
   score agents against task suites concurrently.
 - **Persistent memory** (`MemoryStore`, `memory_tools`): path-safe notes that
@@ -30,9 +32,9 @@ All notable changes to Project June are documented here.
   transcript persistence.
 - **Tools**: `@tool` decorator (schema from type hints + docstrings); builtin
   `current_time`, `calculate`, `read_file`, `list_directory`, and opt-in
-  `write_file`.
-- **CLI** (`june`): chat (streaming), one-off, `--goal`, concurrent `--goals`,
-  `--memory`, `--save`.
+  `write_file` (sandboxed to the working tree).
+- **CLI** (`june`, also `python -m project_june`): chat (streaming), one-off,
+  `--goal`, concurrent `--goals`, `--memory`, `--save`, `--model`, `--effort`.
 - **Resilience**: `AgentConfig.max_retries` / `request_timeout` wired into the
   SDK client across all entry points.
 - **Project setup**: `CLAUDE.md`, SessionStart hook + settings, GitHub Actions
