@@ -19,9 +19,15 @@ from .evals import (
     EvalReport,
     EvalResult,
     all_of,
+    any_of,
     completed,
     contains,
+    cost_under,
+    is_json,
+    matches,
+    negate,
     run_eval,
+    steps_under,
 )
 from .memory import MemoryStore, memory_tools
 from .mcp_bridge import MCPProvider, MCPToolSpec, StaticMCPProvider, mcp_tools
@@ -56,6 +62,12 @@ __all__ = [
     "contains",
     "completed",
     "all_of",
+    "any_of",
+    "negate",
+    "matches",
+    "is_json",
+    "cost_under",
+    "steps_under",
     "agent_tool",
     "Tool",
     "tool",

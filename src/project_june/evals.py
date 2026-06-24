@@ -15,6 +15,8 @@ you change prompts, tools, or models.
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -154,5 +156,74 @@ def all_of(*checks: Check) -> Check:
             if not ok:
                 return False, detail
         return True, ""
+
+    return check
+
+
+def any_of(*checks: Check) -> Check:
+    """Pass if at least one check passes."""
+
+    def check(r: RunResult) -> tuple[bool, str]:
+        details = []
+        for c in checks:
+            ok, detail = _normalize(c(r))
+            if ok:
+                return True, ""
+            details.append(detail)
+        return False, "none passed: " + "; ".join(d for d in details if d)
+
+    return check
+
+
+def negate(inner: Check) -> Check:
+    """Pass if the inner check fails (logical NOT)."""
+
+    def check(r: RunResult) -> tuple[bool, str]:
+        ok, _ = _normalize(inner(r))
+        return (not ok), "" if not ok else "unexpectedly passed"
+
+    return check
+
+
+def matches(pattern: str) -> Check:
+    """Pass if the agent's result matches the regex `pattern` (search)."""
+    compiled = re.compile(pattern)
+
+    def check(r: RunResult) -> tuple[bool, str]:
+        ok = compiled.search(r.result) is not None
+        return ok, "" if ok else f"no match for /{pattern}/"
+
+    return check
+
+
+def is_json() -> Check:
+    """Pass if the agent's result parses as JSON."""
+
+    def check(r: RunResult) -> tuple[bool, str]:
+        try:
+            json.loads(r.result)
+            return True, ""
+        except (ValueError, TypeError) as exc:
+            return False, f"not JSON: {exc}"
+
+    return check
+
+
+def cost_under(max_usd: float) -> Check:
+    """Pass if the run cost less than `max_usd`."""
+
+    def check(r: RunResult) -> tuple[bool, str]:
+        ok = r.cost < max_usd
+        return ok, "" if ok else f"cost ${r.cost:.4f} >= ${max_usd:.4f}"
+
+    return check
+
+
+def steps_under(max_steps: int) -> Check:
+    """Pass if the run used fewer than `max_steps` model turns."""
+
+    def check(r: RunResult) -> tuple[bool, str]:
+        ok = r.steps < max_steps
+        return ok, "" if ok else f"{r.steps} steps >= {max_steps}"
 
     return check
