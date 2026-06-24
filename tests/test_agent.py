@@ -18,8 +18,22 @@ def tool_use_block(name, input, id="tu_1"):
     return SimpleNamespace(type="tool_use", name=name, input=input, id=id)
 
 
-def response(content, stop_reason="end_turn"):
-    return SimpleNamespace(content=content, stop_reason=stop_reason, stop_details=None)
+def response(content, stop_reason="end_turn", usage=None):
+    return SimpleNamespace(
+        content=content,
+        stop_reason=stop_reason,
+        stop_details=None,
+        usage=usage,
+    )
+
+
+def usage(input_tokens=0, output_tokens=0):
+    return SimpleNamespace(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
 
 
 class StubClient:
@@ -96,6 +110,26 @@ def test_autonomous_completes_via_complete_task():
     assert result.completed is True
     assert result.result == "goal met"
     assert result.steps == 2
+
+
+def test_autonomous_tracks_usage_and_cost():
+    client = StubClient(
+        [
+            response(
+                [tool_use_block("complete_task", {"summary": "done"})],
+                stop_reason="tool_use",
+                usage=usage(input_tokens=1_000, output_tokens=500),
+            ),
+        ]
+    )
+    from project_june import AgentConfig
+
+    agent = AutonomousAgent(config=AgentConfig(model="claude-opus-4-8"), client=client)
+    result = agent.run("go")
+    assert result.usage.input_tokens == 1_000
+    assert result.usage.output_tokens == 500
+    assert result.model == "claude-opus-4-8"
+    assert result.cost > 0
 
 
 def test_autonomous_nudges_then_stops_at_budget():

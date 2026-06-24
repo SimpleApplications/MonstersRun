@@ -19,6 +19,7 @@ import anthropic
 from .agent import Agent
 from .config import AgentConfig
 from .tools import Tool, tool
+from .usage import Usage
 
 # Called after each model turn: (step_number, response) -> None.
 StepHook = Callable[[int, Any], None]
@@ -46,6 +47,13 @@ class RunResult:
     result: str  # the agent's final summary (or last text if it ran out of steps)
     steps: int  # number of model turns taken
     transcript: list[dict[str, Any]] = field(default_factory=list)
+    usage: Usage = field(default_factory=Usage)
+    model: str = ""
+
+    @property
+    def cost(self) -> float:
+        """Estimated USD cost of the run."""
+        return self.usage.cost(self.model)
 
 
 class AutonomousAgent:
@@ -89,21 +97,25 @@ class AutonomousAgent:
         steps = 0
         while steps < max_steps and self._final is None:
             response = agent.client.messages.create(**agent._request_kwargs())
+            agent.usage.add(getattr(response, "usage", None))
             steps += 1
 
             if response.stop_reason == "refusal":
                 detail = getattr(response, "stop_details", None)
                 category = getattr(detail, "category", None)
-                return RunResult(
+                return self._result(
                     completed=False,
                     result=f"[refused] Request declined (category: {category}).",
                     steps=steps,
-                    transcript=agent.messages,
                 )
 
             agent.messages.append({"role": "assistant", "content": response.content})
             if self.on_step:
                 self.on_step(steps, response)
+
+            # Let a paused server-side tool resume without a user message.
+            if response.stop_reason == "pause_turn":
+                continue
 
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if tool_uses:
@@ -115,7 +127,17 @@ class AutonomousAgent:
 
         completed = self._final is not None
         result = self._final if completed else _last_text(agent.messages)
-        return RunResult(completed, result, steps, agent.messages)
+        return self._result(completed, result, steps)
+
+    def _result(self, completed: bool, result: str, steps: int) -> RunResult:
+        return RunResult(
+            completed=completed,
+            result=result,
+            steps=steps,
+            transcript=self.agent.messages,
+            usage=self.agent.usage,
+            model=self.agent.config.model,
+        )
 
 
 def _last_text(messages: list[dict[str, Any]]) -> str:

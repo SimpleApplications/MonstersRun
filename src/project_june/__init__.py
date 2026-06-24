@@ -13,6 +13,7 @@ from .agent import Agent
 from .autonomous import AutonomousAgent, RunResult
 from .config import AgentConfig
 from .tools import Tool, tool
+from .usage import Usage
 
 __all__ = [
     "Agent",
@@ -21,6 +22,7 @@ __all__ = [
     "AgentConfig",
     "Tool",
     "tool",
+    "Usage",
 ]
 
 __version__ = "0.1.0"

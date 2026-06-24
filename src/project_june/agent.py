@@ -19,6 +19,7 @@ import anthropic
 
 from .config import AgentConfig
 from .tools import Tool
+from .usage import Usage
 
 # A hook called after each tool runs: (tool_name, tool_input, result) -> None.
 EventHook = Callable[[str, dict[str, Any], str], None]
@@ -39,6 +40,8 @@ class Agent:
         self.on_tool = on_tool
         # Conversation history — the API is stateless, so we resend it each turn.
         self.messages: list[dict[str, Any]] = []
+        # Running token/cost accounting across every turn this agent makes.
+        self.usage = Usage()
 
     def add_tool(self, t: Tool) -> None:
         self.tools[t.name] = t
@@ -57,6 +60,10 @@ class Agent:
             kwargs["thinking"] = {"type": "adaptive"}
         if self.tools:
             kwargs["tools"] = [t.to_api() for t in self.tools.values()]
+        if self.config.cache and (self.config.system or self.tools):
+            # Auto-cache the last cacheable block (the tools + system prefix), so
+            # a multi-turn loop reprocesses that prefix at ~0.1x after turn one.
+            kwargs["cache_control"] = {"type": "ephemeral"}
         return kwargs
 
     def run(self, prompt: str) -> str:
@@ -65,6 +72,7 @@ class Agent:
 
         for _ in range(self.config.max_iterations):
             response = self.client.messages.create(**self._request_kwargs())
+            self.usage.add(getattr(response, "usage", None))
 
             if response.stop_reason == "refusal":
                 detail = getattr(response, "stop_details", None)
@@ -73,6 +81,11 @@ class Agent:
 
             # Preserve the full assistant turn (text + thinking + tool_use blocks).
             self.messages.append({"role": "assistant", "content": response.content})
+
+            # A server-side tool hit its iteration cap. Re-send to let the server
+            # resume; do not add a user message.
+            if response.stop_reason == "pause_turn":
+                continue
 
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if not tool_uses:

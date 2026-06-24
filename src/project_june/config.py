@@ -28,6 +28,9 @@ class AgentConfig:
             think per turn). The recommended mode for capable models.
         max_iterations: Safety bound on the tool-use loop so a misbehaving agent
             can't loop forever.
+        cache: When True, cache the tools + system prefix (prompt caching) so
+            multi-turn loops pay the prefix cost once. Cheap and almost always
+            worth it for agentic loops.
     """
 
     model: str = DEFAULT_MODEL
@@ -36,3 +39,4 @@ class AgentConfig:
     effort: str = "high"
     thinking: bool = True
     max_iterations: int = 25
+    cache: bool = True
