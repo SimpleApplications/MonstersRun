@@ -130,12 +130,16 @@ class Agent:
         self.usage.add(getattr(response, "usage", None))
         if response.stop_reason == "refusal":
             raise ValueError("request was declined (refusal)")
+        if response.stop_reason == "max_tokens":
+            raise ValueError("structured output truncated (hit max_tokens); raise max_tokens")
         text = next((b.text for b in response.content if b.type == "text"), "")
+        if not text.strip():
+            raise ValueError(f"no JSON in response (stop_reason={response.stop_reason})")
         return json.loads(text)
 
     def _execute(self, block: Any) -> dict[str, Any]:
         """Run a single tool_use block, returning a tool_result block."""
-        name, tool_input, use_id = block.name, dict(block.input), block.id
+        name, tool_input, use_id = block.name, dict(block.input or {}), block.id
         tool = self.tools.get(name)
         if tool is None:
             return {

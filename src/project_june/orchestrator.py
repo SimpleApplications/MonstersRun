@@ -12,7 +12,7 @@ connection pool) by default. Parallelism is bounded by `max_workers`.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
@@ -91,7 +91,9 @@ class Orchestrator:
         results: list[RunResult] = [None] * len(task_list)  # type: ignore[list-item]
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             futures = {pool.submit(run_one, t): i for i, t in enumerate(task_list)}
-            for future in futures:
+            # Fire on_result as each agent actually finishes (live progress), but
+            # keep `results` ordered by submission index.
+            for future in as_completed(futures):
                 idx = futures[future]
                 results[idx] = future.result()
                 if self.on_result:

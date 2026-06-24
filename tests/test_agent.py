@@ -149,6 +149,57 @@ def test_autonomous_tracks_usage_and_cost():
     assert result.cost > 0
 
 
+def test_run_json_errors_on_truncation():
+    import pytest
+
+    client = StubClient([response([text_block("{")], stop_reason="max_tokens")])
+    agent = Agent(client=client)
+    with pytest.raises(ValueError, match="truncated"):
+        agent.run_json("extract", {"type": "object"})
+
+
+def test_no_arg_tool_with_none_input():
+    # A zero-arg tool may arrive with input=None; _execute must not crash.
+    @tool
+    def ping() -> str:
+        """Return pong."""
+        return "pong"
+
+    client = StubClient(
+        [
+            response(
+                [SimpleNamespace(type="tool_use", name="ping", input=None, id="t0")],
+                stop_reason="tool_use",
+            ),
+            response([text_block("done")]),
+        ]
+    )
+    agent = Agent(tools=[ping], client=client)
+    assert agent.run("ping it") == "done"
+    assert client.calls[1]["messages"][-1]["content"][0]["content"] == "pong"
+
+
+def test_autonomous_run_is_reusable_without_state_leak():
+    # First run completes; a second run on the SAME instance must start fresh.
+    client = StubClient(
+        [
+            response([tool_use_block("complete_task", {"summary": "one"})], stop_reason="tool_use"),
+            response([tool_use_block("complete_task", {"summary": "two"})], stop_reason="tool_use"),
+        ]
+    )
+    agent = AutonomousAgent(client=client)
+    first = agent.run("goal one")
+    second = agent.run("goal two")
+    assert first.result == "one"
+    assert second.result == "two"
+    # Second run's history starts with its own goal, not the first run's.
+    second_first_msg = client.calls[1]["messages"][0]["content"]
+    assert "goal two" in second_first_msg
+    assert "goal one" not in second_first_msg
+    # Usage is per-run, not cumulative.
+    assert second.steps == 1
+
+
 def test_autonomous_nudges_then_stops_at_budget():
     # Agent keeps ending its turn without finishing; budget should stop it.
     client = StubClient([response([text_block("thinking...")]) for _ in range(3)])

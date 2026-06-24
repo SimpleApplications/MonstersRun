@@ -89,9 +89,16 @@ class AutonomousAgent:
         self.on_step = on_step
 
     def run(self, goal: str, max_steps: int = 12) -> RunResult:
-        """Pursue `goal` independently, up to `max_steps` model turns."""
+        """Pursue `goal` independently, up to `max_steps` model turns.
+
+        Each call is independent: the conversation and usage are reset so the
+        returned `RunResult` reflects only this run. (Reuse the instance freely.)
+        """
         self._final = None
         agent = self.agent
+        # Fresh conversation + accounting per run — reuse must not leak prior state.
+        agent.messages = []
+        agent.usage = Usage()
         agent.messages.append({"role": "user", "content": _GOAL_PROMPT.format(goal=goal)})
 
         steps = 0

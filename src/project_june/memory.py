@@ -4,9 +4,12 @@ A `MemoryStore` is a directory of small text documents an agent can read and
 write across runs, so an independent agent can carry learnings from one session
 into the next. `memory_tools(store)` exposes it to an agent as a set of tools.
 
-Security: every key is validated to stay inside the store's root directory —
-path-traversal attempts (``..``, absolute paths, symlinks pointing out) are
-rejected, because tool inputs are model-controlled.
+Security: tool inputs are model-controlled, so every key is resolved and checked
+to stay inside the store's root directory — ``..`` traversal and resolved paths
+that land outside the root are rejected, and leading slashes are stripped so an
+absolute-looking key is neutralized into a relative one. (Keys are confined on
+write; if you point the root at a directory containing symlinks you created, the
+usual filesystem caveats apply.)
 """
 
 from __future__ import annotations
