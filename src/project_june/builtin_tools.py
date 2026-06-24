@@ -62,4 +62,49 @@ def read_file(path: str, max_chars: int = 4000) -> str:
     return text
 
 
-DEFAULT_TOOLS = [current_time, calculate, read_file]
+@tool
+def list_directory(path: str = ".", max_entries: int = 100) -> str:
+    """List the entries in a directory (directories marked with a trailing /).
+
+    Args:
+        path: Directory to list. Defaults to the current directory.
+        max_entries: Cap on how many entries to return. Defaults to 100.
+    """
+    p = Path(path).expanduser()
+    if not p.is_dir():
+        return f"Error: not a directory: {path}"
+    entries = sorted(
+        (c.name + ("/" if c.is_dir() else "") for c in p.iterdir()),
+        key=str.lower,
+    )
+    shown = entries[:max_entries]
+    out = "\n".join(shown) if shown else "(empty)"
+    if len(entries) > max_entries:
+        out += f"\n... [{len(entries) - max_entries} more]"
+    return out
+
+
+@tool
+def write_file(path: str, content: str) -> str:
+    """Write text to a file, confined to the current working directory tree.
+
+    Writes outside the working directory are refused (the path is model-supplied).
+
+    Args:
+        path: Destination path (relative to, or inside, the working directory).
+        content: The UTF-8 text to write.
+    """
+    root = Path.cwd().resolve()
+    dest = (root / Path(path)).resolve()
+    if dest != root and root not in dest.parents:
+        return f"Error: refusing to write outside the working directory: {path}"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(content, encoding="utf-8")
+    return f"wrote {len(content)} chars to {dest.relative_to(root)}"
+
+
+# Read-only, side-effect-free tools, safe to hand to any agent by default.
+DEFAULT_TOOLS = [current_time, calculate, read_file, list_directory]
+
+# Tools with side effects — opt in explicitly.
+WRITE_TOOLS = [write_file]
