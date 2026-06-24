@@ -71,7 +71,7 @@ class Orchestrator:
     ) -> None:
         self.config = config or AgentConfig()
         # One shared, thread-safe client → shared connection pool across agents.
-        self.client = client or anthropic.Anthropic()
+        self.client = client or anthropic.Anthropic(**self.config.client_kwargs())
         self.max_workers = max_workers
         self.on_result = on_result
 

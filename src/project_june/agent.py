@@ -36,8 +36,9 @@ class Agent:
         on_tool: EventHook | None = None,
     ) -> None:
         self.config = config or AgentConfig()
-        # The SDK resolves ANTHROPIC_API_KEY from the environment by default.
-        self.client = client or anthropic.Anthropic()
+        # The SDK resolves ANTHROPIC_API_KEY from the environment by default and
+        # retries transient errors (429/500/overloaded) with backoff.
+        self.client = client or anthropic.Anthropic(**self.config.client_kwargs())
         self.tools: dict[str, Tool] = {t.name: t for t in (tools or [])}
         self.on_tool = on_tool
         # Conversation history — the API is stateless, so we resend it each turn.

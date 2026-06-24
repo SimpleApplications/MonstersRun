@@ -36,9 +36,8 @@ class AsyncAgent:
         client: anthropic.AsyncAnthropic | None = None,
         on_tool: EventHook | None = None,
     ) -> None:
-        self.client = client or anthropic.AsyncAnthropic()
-        # The sync Agent owns messages/usage/tools and _advance/_execute logic.
         self._core = Agent(tools=tools, config=config, client=_UNUSED_CLIENT, on_tool=on_tool)
+        self.client = client or anthropic.AsyncAnthropic(**self._core.config.client_kwargs())
 
     @property
     def messages(self) -> list[dict[str, Any]]:
@@ -143,7 +142,7 @@ class AsyncOrchestrator:
         on_result: Callable[[str, RunResult], None] | None = None,
     ) -> None:
         self.config = config or AgentConfig()
-        self.client = client or anthropic.AsyncAnthropic()
+        self.client = client or anthropic.AsyncAnthropic(**self.config.client_kwargs())
         self.max_concurrency = max_concurrency
         self.on_result = on_result
 

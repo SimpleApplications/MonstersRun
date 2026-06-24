@@ -34,6 +34,9 @@ class AgentConfig:
         max_context_tokens: If set, compact the message history to stay under this
             estimated token budget on long runs (drops the oldest exchanges,
             keeps the task + recent turns). None disables compaction.
+        max_retries: How many times the SDK retries transient errors (429/500/
+            overloaded) with exponential backoff before giving up.
+        request_timeout: Per-request timeout in seconds (None = SDK default).
     """
 
     model: str = DEFAULT_MODEL
@@ -44,3 +47,12 @@ class AgentConfig:
     max_iterations: int = 25
     cache: bool = True
     max_context_tokens: int | None = None
+    max_retries: int = 4
+    request_timeout: float | None = None
+
+    def client_kwargs(self) -> dict:
+        """Constructor kwargs for the Anthropic client (retries/timeout)."""
+        kwargs: dict = {"max_retries": self.max_retries}
+        if self.request_timeout is not None:
+            kwargs["timeout"] = self.request_timeout
+        return kwargs
